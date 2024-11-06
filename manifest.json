@@ -1,0 +1,13 @@
+{
+    "manifest_version": 3,
+    "name": "Crunchyroll Ratings Display",
+    "version": "1.0",
+    "description": "Shows anime ratings next to titles on Crunchyroll",
+    "permissions": ["activeTab"],
+    "content_scripts": [
+      {
+        "matches": ["*://*.crunchyroll.com/*"],
+        "js": ["content.js"]
+      }
+    ]
+  }
