@@ -4,11 +4,12 @@ A Chrome extension that enhances your Crunchyroll experience by displaying anime
 
 ## Features
 - Shows rating scores next to anime titles across all Crunchyroll pages
-- Automatically sorts anime by rating (highest to lowest) in each section
+- Automatically sorts anime by rating (highest to lowest) in each section (where applicable)
 - Works on multiple page layouts:
   - Homepage
   - Browse pages
   - Simulcast/seasonal pages
+  - Alphabetical list view (ratings only, maintains alphabetical order)
 - Configurable settings with easy-to-use toggle switches
 - Updates dynamically as content loads
 - Clean display of rating numbers (e.g., "One Piece (4.7)")
@@ -26,7 +27,7 @@ After installation, you can configure the extension by:
 2. Selecting "Options"
 3. Toggle the following settings:
    - Show Ratings: Display rating numbers next to anime titles
-   - Sort by Rating: Automatically sort anime by rating in each section
+   - Sort by Rating: Automatically sort anime by rating (except in alphabetical view)
 
 ## Project Structure
 The extension consists of:
@@ -39,7 +40,8 @@ The extension consists of:
 ## Technical Details
 - Uses MutationObserver for dynamic content handling
 - Implements debouncing for performance optimization
-- Handles multiple page layouts with unified sorting logic
+- Handles multiple page layouts with unified rating display
+- Smart sorting that respects alphabetical view
 - Uses Chrome Storage API for persistent settings
 - Background script for settings management
 - Message passing between components
@@ -57,8 +59,19 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
 
-
 # Changelog
+
+## [1.3.0] - 2024-11-07
+### Added
+- Support for alphabetical view page
+- Smart layout detection for different page types
+- Conditional sorting based on page type
+- Rating display support for horizontal card layout
+
+### Changed
+- Improved page type detection
+- Enhanced rating display logic
+- Updated documentation with new supported layouts
 
 ## [1.2.0] - 2024-11-07
 ### Added

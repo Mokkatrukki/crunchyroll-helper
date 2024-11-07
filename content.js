@@ -9,12 +9,10 @@ let settings = {
     enableSorting: true
 };
 
-// Load settings first
 function loadSettings() {
     return new Promise((resolve) => {
-        // Send message to background script to get settings
         try {
-            resolve(settings);  // Use default settings for now
+            resolve(settings);
         } catch (error) {
             console.log('Using default settings');
             resolve(settings);
@@ -41,6 +39,11 @@ function sortContainer(container, cardsNodeList) {
 function sortSeriesCards() {
     loadSettings().then(settings => {
         if (!settings.enableSorting) return;
+
+        // Don't sort on alphabetical view
+        if (window.location.href.includes('/videos/alphabetical')) {
+            return;
+        }
 
         const now = Date.now();
         if (isSorting || (now - lastSort) < SORT_COOLDOWN) {
@@ -77,7 +80,21 @@ function addRatingsToTitles() {
     loadSettings().then(settings => {
         if (!settings.showRatings) return;
 
-        // Select cards from both layouts
+        // Handle alphabetical view
+        if (window.location.href.includes('/videos/alphabetical')) {
+            document.querySelectorAll('[data-t="series-card"]').forEach(card => {
+                const titleLink = card.querySelector('.horizontal-card__title-link--s2h7N');
+                const ratingElement = card.querySelector('[data-t="rating-section"] p');
+                const rating = ratingElement?.textContent?.trim();
+
+                if (titleLink && rating && !titleLink.textContent.includes('(')) {
+                    titleLink.textContent = `${titleLink.textContent} (${rating})`;
+                }
+            });
+            return; // Exit after handling alphabetical view
+        }
+
+        // Handle other views
         const selectors = [
             '[data-t^="series-card"]',
             '.browse-card [data-t^="series-card"]'
@@ -128,7 +145,9 @@ const observer = new MutationObserver((mutations) => {
                 node.matches?.('[data-t^="series-card"]') ||
                 node.querySelector?.('[data-t^="series-card"]') ||
                 node.matches?.('.browse-card') ||
-                node.querySelector?.('.browse-card')
+                node.querySelector?.('.browse-card') ||
+                node.matches?.('.horizontal-card__title-link--s2h7N') ||
+                node.querySelector?.('.horizontal-card__title-link--s2h7N')
             )
         )
     );
