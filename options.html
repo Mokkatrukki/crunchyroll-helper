@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crunchyroll Helper Settings</title>
+    <style>
+        body {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .setting-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .setting-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .setting-description {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #f47521;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .status {
+            display: none;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .status.success {
+            display: block;
+            background-color: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Crunchyroll Helper Settings</h1>
+        
+        <div class="setting-group">
+            <div class="setting-title">Show Ratings</div>
+            <div class="setting-description">
+                Display anime ratings next to titles (e.g., "One Piece (4.9)"). 
+                This helps you quickly see how other users have rated each anime.
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="showRatings" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="setting-group">
+            <div class="setting-title">Sort by Rating</div>
+            <div class="setting-description">
+                Automatically sort anime in each section by their rating (highest to lowest).
+                This helps you discover the highest-rated shows first.
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="enableSorting" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script src="options.js"></script>
+</body>
