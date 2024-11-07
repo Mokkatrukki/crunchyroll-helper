@@ -1,15 +1,40 @@
-// content.js (updated version)
+// content.js
 let isSorting = false;
 let lastSort = 0;
 const SORT_COOLDOWN = 1000;
 
+// Default settings
+let settings = {
+    showRatings: true,
+    enableSorting: true
+};
+
 // Load settings first
 function loadSettings() {
     return new Promise((resolve) => {
-        chrome.storage.sync.get({
-            showRatings: true,
-            enableSorting: true
-        }, resolve);
+        // Send message to background script to get settings
+        try {
+            resolve(settings);  // Use default settings for now
+        } catch (error) {
+            console.log('Using default settings');
+            resolve(settings);
+        }
+    });
+}
+
+function sortContainer(container, cardsNodeList) {
+    const cards = Array.from(cardsNodeList);
+    
+    const cardsWithRatings = cards.map(card => {
+        const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
+        const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
+        return { card, rating };
+    });
+
+    cardsWithRatings.sort((a, b) => b.rating - a.rating);
+
+    cardsWithRatings.forEach(({ card }) => {
+        container.appendChild(card);
     });
 }
 
@@ -26,24 +51,22 @@ function sortSeriesCards() {
         lastSort = now;
 
         try {
-            const containers = document.querySelectorAll('[data-t="cards"]');
-            if (!containers.length) return;
-
-            containers.forEach(container => {
-                const cards = Array.from(container.children);
-                
-                const cardsWithRatings = cards.map(card => {
-                    const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
-                    const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
-                    return { card, rating };
+            // Try standard layout first
+            const standardContainers = document.querySelectorAll('[data-t="cards"]');
+            if (standardContainers.length) {
+                standardContainers.forEach(container => {
+                    sortContainer(container, container.children);
                 });
+            }
 
-                cardsWithRatings.sort((a, b) => b.rating - a.rating);
-
-                cardsWithRatings.forEach(({ card }) => {
-                    container.appendChild(card);
-                });
-            });
+            // Try grid layout
+            const gridContainer = document.querySelector('.erc-browse-cards-collection');
+            if (gridContainer) {
+                const gridCards = gridContainer.querySelectorAll('.browse-card');
+                if (gridCards.length) {
+                    sortContainer(gridContainer, gridCards);
+                }
+            }
         } finally {
             isSorting = false;
         }
@@ -54,16 +77,24 @@ function addRatingsToTitles() {
     loadSettings().then(settings => {
         if (!settings.showRatings) return;
 
-        document.querySelectorAll('[data-t^="series-card"]').forEach(card => {
-            const titleH4 = card.querySelector('[data-t="title"]');
-            const titleLink = titleH4?.querySelector('a');
-            
-            const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
-            const rating = ratingElement?.textContent?.trim();
+        // Select cards from both layouts
+        const selectors = [
+            '[data-t^="series-card"]',
+            '.browse-card [data-t^="series-card"]'
+        ];
+        
+        selectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(card => {
+                const titleH4 = card.querySelector('[data-t="title"]');
+                const titleLink = titleH4?.querySelector('a');
+                
+                const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
+                const rating = ratingElement?.textContent?.trim();
 
-            if (titleLink && rating && !titleLink.textContent.includes('(')) {
-                titleLink.textContent = `${titleLink.textContent} (${rating})`;
-            }
+                if (titleLink && rating && !titleLink.textContent.includes('(')) {
+                    titleLink.textContent = `${titleLink.textContent} (${rating})`;
+                }
+            });
         });
 
         if (settings.enableSorting) {
@@ -80,6 +111,14 @@ function debouncedUpdate() {
     updateTimeout = setTimeout(addRatingsToTitles, 1000);
 }
 
+// Listen for settings changes
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === 'settingsUpdated') {
+        settings = request.settings;
+        debouncedUpdate();
+    }
+});
+
 setTimeout(addRatingsToTitles, 1500);
 
 const observer = new MutationObserver((mutations) => {
@@ -87,7 +126,9 @@ const observer = new MutationObserver((mutations) => {
         Array.from(mutation.addedNodes).some(node => 
             node.nodeType === 1 && (
                 node.matches?.('[data-t^="series-card"]') ||
-                node.querySelector?.('[data-t^="series-card"]')
+                node.querySelector?.('[data-t^="series-card"]') ||
+                node.matches?.('.browse-card') ||
+                node.querySelector?.('.browse-card')
             )
         )
     );

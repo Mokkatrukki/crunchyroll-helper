@@ -1,13 +1,15 @@
-// README.md
 # Crunchyroll Helper
 
-A Chrome extension that enhances your Crunchyroll experience by displaying anime ratings and providing sorting functionality.
+A Chrome extension that enhances your Crunchyroll experience by displaying anime ratings and providing automatic sorting functionality.
 
 ## Features
 - Shows rating scores next to anime titles across all Crunchyroll pages
 - Automatically sorts anime by rating (highest to lowest) in each section
+- Works on multiple page layouts:
+  - Homepage
+  - Browse pages
+  - Simulcast/seasonal pages
 - Configurable settings with easy-to-use toggle switches
-- Works on both homepage and browsing pages
 - Updates dynamically as content loads
 - Clean display of rating numbers (e.g., "One Piece (4.7)")
 
@@ -30,14 +32,17 @@ After installation, you can configure the extension by:
 The extension consists of:
 - `manifest.json`: Extension configuration and permissions
 - `content.js`: Main script that handles ratings display and sorting
+- `background.js`: Manages extension settings and state
 - `options.html`: Configuration page UI
 - `options.js`: Configuration page functionality
 
 ## Technical Details
-- Uses Chrome Storage API for persistent settings
+- Uses MutationObserver for dynamic content handling
 - Implements debouncing for performance optimization
-- Handles dynamic content loading via MutationObserver
-- Prevents sorting conflicts with cooldown system
+- Handles multiple page layouts with unified sorting logic
+- Uses Chrome Storage API for persistent settings
+- Background script for settings management
+- Message passing between components
 
 ## Development
 To modify the extension:
@@ -52,7 +57,20 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
 
+
 # Changelog
+
+## [1.2.0] - 2024-11-07
+### Added
+- Support for simulcast/seasonal page layout
+- Background script for settings management
+- Unified sorting logic for all page layouts
+- Improved error handling
+
+### Changed
+- Refactored settings management
+- Enhanced content script stability
+- Updated documentation
 
 ## [1.1.0] - 2024-11-07
 ### Added
