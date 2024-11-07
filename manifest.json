@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Crunchyroll Helper",
+  "name": "Better Browsing for Crunchyroll",
   "version": "1.0",
-  "description": "Enhances your Crunchyroll experience by showing anime ratings and more",
+  "description": "Enhance your anime discovery! See ratings instantly and find top-rated shows easily on Crunchyroll. Makes browsing simple and efficient.",
   "permissions": [
       "activeTab",
       "storage"
