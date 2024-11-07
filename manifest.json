@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Better Browsing for Crunchyroll",
   "version": "1.0",
-  "description": "Enhance your anime discovery! See ratings instantly and find top-rated shows easily on Crunchyroll. Makes browsing simple and efficient.",
+  "description": "See ratings instantly and find top-rated shows easily on Crunchyroll.",
   "permissions": [
       "activeTab",
       "storage"
