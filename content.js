@@ -1,5 +1,6 @@
 let isSorting = false;
 let lastSort = 0;
+let firstLoad = true;
 const SORT_COOLDOWN = 1000;
 let isUserScrolling = false;
 let userInteractionTimeout;
@@ -32,7 +33,8 @@ function addRatingsToTitles() {
 }
 
 function sortSeriesCards() {
-    if (isSorting || (Date.now() - lastSort) < SORT_COOLDOWN) return;
+    // Skip cooldown check on first load
+    if (!firstLoad && (isSorting || (Date.now() - lastSort) < SORT_COOLDOWN)) return;
 
     isSorting = true;
     lastSort = Date.now();
@@ -139,8 +141,14 @@ function findContainer(node) {
 }
 
 function initializePageContent() {
-    addRatingsToTitles();
-    sortSeriesCards();
+    // Execute immediately without debounce on first load
+    if (firstLoad) {
+        addRatingsToTitles();
+        sortSeriesCards();
+        firstLoad = false;
+    } else {
+        debouncedUpdate();
+    }
 }
 
 // Simplified navigation handler
