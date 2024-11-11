@@ -2,13 +2,9 @@
 let isSorting = false;
 let lastSort = 0;
 const SORT_COOLDOWN = 1000;
-let processedCards = new WeakSet(); // Use WeakSet instead of Set for DOM elements
-let lastCarouselState = null;
-let debounceTimeout = null;
+let processedCards = new WeakSet();
 let isUserScrolling = false;
 let userInteractionTimeout;
-let ratingsCache = new WeakMap();
-let lastSortedState = new WeakMap();
 
 // Default settings
 let settings = {
@@ -27,52 +23,36 @@ function loadSettings() {
     });
 }
 
-// Replace the existing sortContainer function
 function sortContainer(container, cardsNodeList) {
     if (!container || !cardsNodeList.length) return;
     
     const isCarousel = container.classList.contains('carousel-scroller__track--43f0L');
     if (isCarousel && isUserScrolling) return;
 
-    // Get current container state hash
-    const currentState = Array.from(cardsNodeList).map(card => card.outerHTML).join('');
-    if (lastSortedState.get(container) === currentState) return;
-
     const cards = Array.from(cardsNodeList);
     const fragment = document.createDocumentFragment();
     
-    // Use cached ratings or get new ones
+    // Simplified rating collection without caching
     const cardsWithRatings = cards.map(card => {
-        let rating = ratingsCache.get(card);
-        if (rating === undefined) {
-            const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
-            rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
-            ratingsCache.set(card, rating);
-        }
+        const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
+        const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
         return { card, rating };
     }).filter(item => item.rating > 0);
 
     if (cardsWithRatings.length === 0) return;
 
-    // Sort using cached ratings
     cardsWithRatings.sort((a, b) => b.rating - a.rating);
 
-    // Batch DOM updates using DocumentFragment
+    // Batch DOM updates
     if (isCarousel) {
         const scrollLeft = container.scrollLeft;
-        const transform = container.style.transform;
-        
         cardsWithRatings.forEach(({ card }) => fragment.appendChild(card));
         container.appendChild(fragment);
-        
         container.scrollLeft = scrollLeft;
-        container.style.transform = transform;
     } else {
         cardsWithRatings.forEach(({ card }) => fragment.appendChild(card));
         container.appendChild(fragment);
     }
-
-    lastSortedState.set(container, currentState);
 }
 
 function addRatingsToTitles() {
@@ -126,15 +106,24 @@ function addRatingsToTitles() {
     });
 }
 
-// Replace sortAllCarousels with a simpler version
-function sortAllCarousels() {
-    const tracks = document.querySelectorAll('.carousel-scroller__track--43f0L');
-    tracks.forEach((track) => {
-        if (!isUserScrolling) {
-            sortContainer(track, track.children);
+// Simplified observer
+const observer = new MutationObserver((mutations) => {
+    if (isUserScrolling) return;
+    
+    let shouldUpdate = false;
+    for (const mutation of mutations) {
+        if (mutation.target.classList?.contains('star-rating-short-static__rating--bdAfR')) {
+            continue;
         }
-    });
-}
+        
+        shouldUpdate = true;
+        break;
+    }
+
+    if (shouldUpdate) {
+        debouncedUpdate();
+    }
+});
 
 // Add event listeners for user interaction
 function setupCarouselInteractionHandlers() {
@@ -194,8 +183,11 @@ function sortSeriesCards() {
                 }
             }
 
-            // Sort all carousels
-            sortAllCarousels();
+            // Handle carousels
+            const carousels = document.querySelectorAll('.carousel-scroller__track--43f0L');
+            carousels.forEach(carousel => {
+                sortContainer(carousel, carousel.children);
+            });
         } finally {
             isSorting = false;
         }
@@ -221,7 +213,6 @@ const debouncedUpdate = debounce(() => {
 
 // Remove the setTimeout and replace with immediate initialization
 
-
 // Add this function before the observer definition
 function findContainer(node) {
     if (!node || node === document.body) return null;
@@ -231,108 +222,14 @@ function findContainer(node) {
     return findContainer(node.parentElement);
 }
 
-// Enhanced mutation observer
-const observer = new MutationObserver((mutations) => {
-    let affectedContainers = new Set();
-    let shouldUpdate = false;
-    
-    for (const mutation of mutations) {
-        // Ignore mutations if user is interacting
-        if (isUserScrolling) continue;
-
-        if (mutation.target.classList?.contains('star-rating-short-static__rating--bdAfR')) {
-            continue;
-        }
-        
-        // Check if the mutation involves cards or containers
-        const isRelevantNode = (node) => {
-            if (node.nodeType !== 1) return false;
-            return node.matches?.('[data-t^="series-card"]') ||
-                   node.querySelector?.('[data-t^="series-card"]') ||
-                   node.matches?.('.browse-card') ||
-                   node.querySelector?.('.browse-card') ||
-                   node.matches?.('.carousel-scroller__track--43f0L') ||
-                   node.matches?.('[data-t="cards"]') ||
-                   node.matches?.('.erc-browse-cards-collection') ||
-                   node.matches?.('.horizontal-card__title-link--s2h7N') ||
-                   node.querySelector?.('.horizontal-card__title-link--s2h7N');
-        };
-
-        // Process added nodes
-        const hasNewCards = Array.from(mutation.addedNodes).some(node => isRelevantNode(node));
-        if (hasNewCards) {
-            shouldUpdate = true;
-        }
-
-        // Find and process containers
-        mutation.addedNodes.forEach(node => {
-            if (isRelevantNode(node)) {
-                const container = findContainer(node);
-                if (container) affectedContainers.add(container);
-            }
-        });
-
-        if (isRelevantNode(mutation.target)) {
-            const container = findContainer(mutation.target);
-            if (container) affectedContainers.add(container);
-        }
-    }
-
-    // Handle updates
-    if (shouldUpdate && !isUserScrolling) {
-        cleanupCaches(); // Add this line
-        debouncedUpdate();
-    }
-
-    // Process affected containers
-    if (affectedContainers.size > 0) {
-        addRatingsToTitles();
-        affectedContainers.forEach(container => {
-            if (container.children.length > 0) {
-                sortContainer(container, container.children);
-            }
-        });
-    }
-});
-
-// Add intersection observer for carousels
-const carouselObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting && entry.target.classList.contains('carousel-scroller__track--43f0L')) {
-            sortContainer(entry.target, entry.target.children);
-        }
-    });
-}, { threshold: 0.1 });
-
-// Observe existing carousels
-function observeCarousels() {
-    document.querySelectorAll('.carousel-scroller__track--43f0L').forEach(track => {
-        carouselObserver.observe(track);
-    });
-}
-
-// Add these functions after the existing function declarations
-function initializePageContent(retryCount = 0, maxRetries = 5) {
-    const hasContent = document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]').length > 0;
-    
-    if (!hasContent && retryCount < maxRetries) {
-        // Retry after a short delay with exponential backoff
-        setTimeout(() => {
-            initializePageContent(retryCount + 1, maxRetries);
-        }, Math.min(100 * Math.pow(2, retryCount), 2000));
-        return;
-    }
-
-    cleanupCaches(); // Add this line before other operations
-    processedCards = new WeakSet(); // Reset processed cards on new page
+function initializePageContent() {
+    processedCards = new WeakSet(); // Reset processed cards
     addRatingsToTitles();
     sortSeriesCards();
-    observeCarousels();
 }
 
-// Add page navigation detection
+// Simplified navigation handler
 function setupNavigationHandlers() {
-    // History API navigation
     let lastUrl = location.href;
     new MutationObserver(() => {
         const url = location.href;
@@ -341,42 +238,23 @@ function setupNavigationHandlers() {
             initializePageContent();
         }
     }).observe(document, { subtree: true, childList: true });
-
-    // Handle back/forward navigation
-    window.addEventListener('popstate', () => {
-        initializePageContent();
-    });
-
-    // Handle regular navigation
-    document.addEventListener('DOMContentLoaded', () => {
-        initializePageContent();
-    });
 }
 
-// Add this cleanup function
-function cleanupCaches() {
-    ratingsCache = new WeakMap();
-    lastSortedState = new WeakMap();
-}
-
-// Replace the initialization code at the bottom with:
+// Initialize
 observer.observe(document.body, {
     childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['class', 'data-t']
+    subtree: true
 });
 
-// Initialize everything
 setupNavigationHandlers();
 initializePageContent();
 setupCarouselInteractionHandlers();
 
-// Listen for settings changes
+// Settings listener
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'settingsUpdated') {
         settings = request.settings;
-        processedCards = new WeakSet(); // Reset processed cards when settings change
+        processedCards = new WeakSet();
         debouncedUpdate();
     }
 });
