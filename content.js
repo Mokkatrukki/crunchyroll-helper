@@ -308,6 +308,48 @@ function observeCarousels() {
     });
 }
 
+// Add these functions after the existing function declarations
+function initializePageContent(retryCount = 0, maxRetries = 5) {
+    const hasContent = document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]').length > 0;
+    
+    if (!hasContent && retryCount < maxRetries) {
+        // Retry after a short delay with exponential backoff
+        setTimeout(() => {
+            initializePageContent(retryCount + 1, maxRetries);
+        }, Math.min(100 * Math.pow(2, retryCount), 2000));
+        return;
+    }
+
+    processedCards = new WeakSet(); // Reset processed cards on new page
+    addRatingsToTitles();
+    sortSeriesCards();
+    observeCarousels();
+}
+
+// Add page navigation detection
+function setupNavigationHandlers() {
+    // History API navigation
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+        const url = location.href;
+        if (url !== lastUrl) {
+            lastUrl = url;
+            initializePageContent();
+        }
+    }).observe(document, { subtree: true, childList: true });
+
+    // Handle back/forward navigation
+    window.addEventListener('popstate', () => {
+        initializePageContent();
+    });
+
+    // Handle regular navigation
+    document.addEventListener('DOMContentLoaded', () => {
+        initializePageContent();
+    });
+}
+
+// Replace the initialization code at the bottom with:
 observer.observe(document.body, {
     childList: true,
     subtree: true,
@@ -315,11 +357,9 @@ observer.observe(document.body, {
     attributeFilter: ['class', 'data-t']
 });
 
-// Initial carousel observation
-observeCarousels();
-addRatingsToTitles();
-
-// Initialize user interaction handlers
+// Initialize everything
+setupNavigationHandlers();
+initializePageContent();
 setupCarouselInteractionHandlers();
 
 // Listen for settings changes
