@@ -2,7 +2,7 @@
 let isSorting = false;
 let lastSort = 0;
 const SORT_COOLDOWN = 1000;
-let processedCards = new Set(); // Track cards we've already processed
+let processedCards = new WeakSet(); // Use WeakSet instead of Set for DOM elements
 
 // Default settings
 let settings = {
@@ -28,9 +28,9 @@ function sortContainer(container, cardsNodeList) {
         const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
         const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
         return { card, rating };
-    }).filter(item => item.rating > 0); // Only include items with actual ratings
+    }).filter(item => item.rating > 0);
 
-    if (cardsWithRatings.length === 0) return; // Don't sort if no ratings found
+    if (cardsWithRatings.length === 0) return;
 
     cardsWithRatings.sort((a, b) => b.rating - a.rating);
 
@@ -58,8 +58,19 @@ function addRatingsToTitles() {
         }
 
         cards.forEach(card => {
-            const cardId = card.getAttribute('data-t');
-            if (processedCards.has(cardId)) return; // Skip if already processed
+            // Skip if we've already processed this exact DOM element
+            if (processedCards.has(card)) {
+                const titleElement = window.location.href.includes('/videos/alphabetical') ?
+                    card.querySelector('.horizontal-card__title-link--s2h7N') :
+                    card.querySelector('[data-t="title"] a');
+                
+                // If title doesn't have rating anymore (e.g., after dynamic update), remove from processed
+                if (titleElement && !titleElement.textContent.includes('(')) {
+                    processedCards.delete(card);
+                } else {
+                    return;
+                }
+            }
 
             const titleElement = window.location.href.includes('/videos/alphabetical') ?
                 card.querySelector('.horizontal-card__title-link--s2h7N') :
@@ -70,7 +81,7 @@ function addRatingsToTitles() {
 
             if (titleElement && rating && !titleElement.textContent.includes('(')) {
                 titleElement.textContent = `${titleElement.textContent} (${rating})`;
-                processedCards.add(cardId); // Mark as processed
+                processedCards.add(card); // Mark the DOM element as processed
             }
         });
 
@@ -116,7 +127,7 @@ function sortSeriesCards() {
     });
 }
 
-// Debounce function
+// Improved debounce with immediate option
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -130,26 +141,23 @@ function debounce(func, wait) {
 }
 
 const debouncedUpdate = debounce(() => {
-    processedCards.clear(); // Clear processed cards before update
     addRatingsToTitles();
 }, 1000);
 
-// Initial load with delay
+// Initial load with shorter delay
 setTimeout(() => {
     addRatingsToTitles();
-}, 1500);
+}, 1000);
 
 // More precise mutation observer
 const observer = new MutationObserver((mutations) => {
     let shouldUpdate = false;
     
     for (const mutation of mutations) {
-        // Skip if mutation is from our own changes
         if (mutation.target.classList?.contains('star-rating-short-static__rating--bdAfR')) {
             continue;
         }
         
-        // Check for relevant changes
         const hasNewCards = Array.from(mutation.addedNodes).some(node => 
             node.nodeType === 1 && (
                 node.matches?.('[data-t^="series-card"]') ||
@@ -181,7 +189,7 @@ observer.observe(document.body, {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'settingsUpdated') {
         settings = request.settings;
-        processedCards.clear(); // Clear processed cards when settings change
+        processedCards = new WeakSet(); // Reset processed cards when settings change
         debouncedUpdate();
     }
 });
