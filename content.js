@@ -22,6 +22,8 @@ function loadSettings() {
 }
 
 function sortContainer(container, cardsNodeList) {
+    // Check if this is a carousel track
+    const isCarousel = container.classList.contains('carousel-scroller__track--43f0L');
     const cards = Array.from(cardsNodeList);
     
     const cardsWithRatings = cards.map(card => {
@@ -39,9 +41,28 @@ function sortContainer(container, cardsNodeList) {
     const newOrder = cardsWithRatings.map(({ card }) => card.outerHTML).join('');
     
     if (currentOrder !== newOrder) {
-        cardsWithRatings.forEach(({ card }) => {
-            container.appendChild(card);
-        });
+        // If it's a carousel, handle the special case
+        if (isCarousel) {
+            // Clear transform and any scroll position
+            container.style.transform = '';
+            container.scrollLeft = 0;
+            
+            // Force layout recalculation
+            void container.offsetHeight;
+
+            // Reappend in sorted order
+            cardsWithRatings.forEach(({ card }) => {
+                container.appendChild(card);
+            });
+
+            // Set transform explicitly to show first items
+            container.style.transform = 'translate3d(0px, 0px, 0px)';
+        } else {
+            // Regular container sorting
+            cardsWithRatings.forEach(({ card }) => {
+                container.appendChild(card);
+            });
+        }
     }
 }
 
