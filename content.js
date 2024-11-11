@@ -7,6 +7,8 @@ let lastCarouselState = null;
 let debounceTimeout = null;
 let isUserScrolling = false;
 let userInteractionTimeout;
+let ratingsCache = new WeakMap();
+let lastSortedState = new WeakMap();
 
 // Default settings
 let settings = {
@@ -25,52 +27,52 @@ function loadSettings() {
     });
 }
 
+// Replace the existing sortContainer function
 function sortContainer(container, cardsNodeList) {
-    // Check if this is a carousel track
-    const isCarousel = container.classList.contains('carousel-scroller__track--43f0L');
+    if (!container || !cardsNodeList.length) return;
     
-    // Don't sort if user is interacting with carousel
-    if (isCarousel && isUserScrolling) {
-        return;
-    }
+    const isCarousel = container.classList.contains('carousel-scroller__track--43f0L');
+    if (isCarousel && isUserScrolling) return;
+
+    // Get current container state hash
+    const currentState = Array.from(cardsNodeList).map(card => card.outerHTML).join('');
+    if (lastSortedState.get(container) === currentState) return;
 
     const cards = Array.from(cardsNodeList);
+    const fragment = document.createDocumentFragment();
     
+    // Use cached ratings or get new ones
     const cardsWithRatings = cards.map(card => {
-        const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
-        const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
+        let rating = ratingsCache.get(card);
+        if (rating === undefined) {
+            const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
+            rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
+            ratingsCache.set(card, rating);
+        }
         return { card, rating };
     }).filter(item => item.rating > 0);
 
     if (cardsWithRatings.length === 0) return;
 
+    // Sort using cached ratings
     cardsWithRatings.sort((a, b) => b.rating - a.rating);
 
-    // Only reorder if the order has actually changed
-    const currentOrder = cards.map(card => card.outerHTML).join('');
-    const newOrder = cardsWithRatings.map(({ card }) => card.outerHTML).join('');
-    
-    if (currentOrder !== newOrder) {
-        // If it's a carousel, preserve the scroll position
-        if (isCarousel) {
-            const scrollLeft = container.scrollLeft;
-            const transform = container.style.transform;
-            
-            // Reappend in sorted order
-            cardsWithRatings.forEach(({ card }) => {
-                container.appendChild(card);
-            });
-
-            // Restore position
-            container.scrollLeft = scrollLeft;
-            container.style.transform = transform;
-        } else {
-            // Regular container sorting
-            cardsWithRatings.forEach(({ card }) => {
-                container.appendChild(card);
-            });
-        }
+    // Batch DOM updates using DocumentFragment
+    if (isCarousel) {
+        const scrollLeft = container.scrollLeft;
+        const transform = container.style.transform;
+        
+        cardsWithRatings.forEach(({ card }) => fragment.appendChild(card));
+        container.appendChild(fragment);
+        
+        container.scrollLeft = scrollLeft;
+        container.style.transform = transform;
+    } else {
+        cardsWithRatings.forEach(({ card }) => fragment.appendChild(card));
+        container.appendChild(fragment);
     }
+
+    lastSortedState.set(container, currentState);
 }
 
 function addRatingsToTitles() {
@@ -278,6 +280,7 @@ const observer = new MutationObserver((mutations) => {
 
     // Handle updates
     if (shouldUpdate && !isUserScrolling) {
+        cleanupCaches(); // Add this line
         debouncedUpdate();
     }
 
@@ -320,6 +323,7 @@ function initializePageContent(retryCount = 0, maxRetries = 5) {
         return;
     }
 
+    cleanupCaches(); // Add this line before other operations
     processedCards = new WeakSet(); // Reset processed cards on new page
     addRatingsToTitles();
     sortSeriesCards();
@@ -347,6 +351,12 @@ function setupNavigationHandlers() {
     document.addEventListener('DOMContentLoaded', () => {
         initializePageContent();
     });
+}
+
+// Add this cleanup function
+function cleanupCaches() {
+    ratingsCache = new WeakMap();
+    lastSortedState = new WeakMap();
 }
 
 // Replace the initialization code at the bottom with:
