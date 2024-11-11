@@ -113,6 +113,40 @@ function addRatingsToTitles() {
     });
 }
 
+function sortAllCarousels() {
+    // Find all carousel tracks
+    const tracks = document.querySelectorAll('.carousel-scroller__track--43f0L');
+
+    tracks.forEach((track) => {
+        // Get current cards and sort them
+        const cards = Array.from(track.children);
+
+        const cardsWithRatings = cards.map(card => {
+            const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
+            const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
+            return { card, rating };
+        }).filter(item => item.rating > 0);
+
+        // Sort by rating
+        cardsWithRatings.sort((a, b) => b.rating - a.rating);
+
+        // Clear transform and any scroll position
+        track.style.transform = '';
+        track.scrollLeft = 0;
+        
+        // Force layout recalculation
+        void track.offsetHeight;
+
+        // Reappend in sorted order
+        cardsWithRatings.forEach(({ card }) => {
+            track.appendChild(card);
+        });
+
+        // Set transform explicitly
+        track.style.transform = 'translate3d(0px, 0px, 0px)';
+    });
+}
+
 function sortSeriesCards() {
     loadSettings().then(settings => {
         if (!settings.enableSorting) return;
@@ -142,6 +176,9 @@ function sortSeriesCards() {
                     sortContainer(gridContainer, gridCards);
                 }
             }
+
+            // Sort all carousels
+            sortAllCarousels();
         } finally {
             isSorting = false;
         }
@@ -165,13 +202,21 @@ const debouncedUpdate = debounce(() => {
     addRatingsToTitles();
 }, 1000);
 
-// Initial load with shorter delay
-setTimeout(() => {
-    addRatingsToTitles();
-}, 1000);
+// Remove the setTimeout and replace with immediate initialization
+addRatingsToTitles();
 
-// More precise mutation observer
+// Add this function before the observer definition
+function findContainer(node) {
+    if (!node || node === document.body) return null;
+    if (node.matches?.('.carousel-scroller__track--43f0L')) return node;
+    if (node.matches?.('[data-t="cards"]')) return node;
+    if (node.matches?.('.erc-browse-cards-collection')) return node;
+    return findContainer(node.parentElement);
+}
+
+// Enhanced mutation observer
 const observer = new MutationObserver((mutations) => {
+    let affectedContainers = new Set();
     let shouldUpdate = false;
     
     for (const mutation of mutations) {
@@ -179,32 +224,81 @@ const observer = new MutationObserver((mutations) => {
             continue;
         }
         
-        const hasNewCards = Array.from(mutation.addedNodes).some(node => 
-            node.nodeType === 1 && (
-                node.matches?.('[data-t^="series-card"]') ||
-                node.querySelector?.('[data-t^="series-card"]') ||
-                node.matches?.('.browse-card') ||
-                node.querySelector?.('.browse-card') ||
-                node.matches?.('.horizontal-card__title-link--s2h7N') ||
-                node.querySelector?.('.horizontal-card__title-link--s2h7N')
-            )
-        );
+        // Check if the mutation involves cards or containers
+        const isRelevantNode = (node) => {
+            if (node.nodeType !== 1) return false;
+            return node.matches?.('[data-t^="series-card"]') ||
+                   node.querySelector?.('[data-t^="series-card"]') ||
+                   node.matches?.('.browse-card') ||
+                   node.querySelector?.('.browse-card') ||
+                   node.matches?.('.carousel-scroller__track--43f0L') ||
+                   node.matches?.('[data-t="cards"]') ||
+                   node.matches?.('.erc-browse-cards-collection') ||
+                   node.matches?.('.horizontal-card__title-link--s2h7N') ||
+                   node.querySelector?.('.horizontal-card__title-link--s2h7N');
+        };
 
+        // Process added nodes
+        const hasNewCards = Array.from(mutation.addedNodes).some(node => isRelevantNode(node));
         if (hasNewCards) {
             shouldUpdate = true;
-            break;
+        }
+
+        // Find and process containers
+        mutation.addedNodes.forEach(node => {
+            if (isRelevantNode(node)) {
+                const container = findContainer(node);
+                if (container) affectedContainers.add(container);
+            }
+        });
+
+        if (isRelevantNode(mutation.target)) {
+            const container = findContainer(mutation.target);
+            if (container) affectedContainers.add(container);
         }
     }
 
+    // Handle updates
     if (shouldUpdate) {
         debouncedUpdate();
     }
+
+    // Process affected containers
+    if (affectedContainers.size > 0) {
+        addRatingsToTitles();
+        affectedContainers.forEach(container => {
+            if (container.children.length > 0) {
+                sortContainer(container, container.children);
+            }
+        });
+    }
 });
+
+// Add intersection observer for carousels
+const carouselObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && entry.target.classList.contains('carousel-scroller__track--43f0L')) {
+            sortContainer(entry.target, entry.target.children);
+        }
+    });
+}, { threshold: 0.1 });
+
+// Observe existing carousels
+function observeCarousels() {
+    document.querySelectorAll('.carousel-scroller__track--43f0L').forEach(track => {
+        carouselObserver.observe(track);
+    });
+}
 
 observer.observe(document.body, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'data-t']
 });
+
+// Initial carousel observation
+observeCarousels();
 
 // Listen for settings changes
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
