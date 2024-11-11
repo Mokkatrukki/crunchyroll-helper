@@ -15,6 +15,9 @@ const CONFIG = {
         MAX_INIT_RETRIES: 3,
         INIT_RETRY_DELAY: 500
     },
+    VIEWPORT: {
+        THRESHOLD: 800  // pixels above/below viewport to process
+    },
     SELECTORS: {
         seriesCard: '[data-t="series-card"]',
         seriesCardWithPrefix: '[data-t^="series-card"], .browse-card [data-t^="series-card"]',
@@ -24,6 +27,10 @@ const CONFIG = {
         cardsContainer: '[data-t="cards"]',
         browseCardsCollection: '.erc-browse-cards-collection',
         carouselTrack: '.carousel-scroller__track--43f0L'
+    },
+    INTERSECTION: {
+        ROOT_MARGIN: '100px 0px',
+        THRESHOLD: 0.1
     }
 };
 
@@ -78,6 +85,14 @@ function getParsedRating(element) {
     return 0;
 }
 
+// Add viewport helper function
+function isNearViewport(element) {
+    const rect = element.getBoundingClientRect();
+    const threshold = CONFIG.VIEWPORT.THRESHOLD;
+    return rect.top >= -threshold && 
+           rect.top <= (window.innerHeight + threshold);
+}
+
 // Helper function to determine page type
 function getPageType() {
     return window.location.href.includes('/videos/alphabetical') 
@@ -126,6 +141,20 @@ function addRatingsToTitles() {
     }
 }
 
+// Add progressive sorting observer
+const progressiveSort = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && !isUserScrolling) {
+            const container = entry.target;
+            sortContainer(container, container.children);
+            progressiveSort.unobserve(container); // Only sort once
+        }
+    });
+}, {
+    rootMargin: CONFIG.INTERSECTION.ROOT_MARGIN,
+    threshold: CONFIG.INTERSECTION.THRESHOLD
+});
+
 function sortSeriesCards() {
     if (!firstLoad && (isSorting || (Date.now() - lastSort) < CONFIG.TIMING.SORT_COOLDOWN)) return;
 
@@ -139,7 +168,14 @@ function sortSeriesCards() {
             ...document.querySelectorAll(CONFIG.SELECTORS.carouselTrack)
         ].filter(Boolean);
 
-        containers.forEach(container => sortContainer(container, container.children));
+        // Use progressive sorting instead of immediate sorting
+        containers.forEach(container => {
+            if (isNearViewport(container)) {
+                sortContainer(container, container.children);
+            } else {
+                progressiveSort.observe(container);
+            }
+        });
     } finally {
         isSorting = false;
     }
@@ -154,26 +190,46 @@ function sortContainer(container, cardsNodeList) {
     const cards = Array.from(cardsNodeList);
     const fragment = document.createDocumentFragment();
     
-    const sortableCards = cards.filter(card => {
-        const ratingElement = card.querySelector(CONFIG.SELECTORS.rating);
-        return ratingElement && getParsedRating(ratingElement) > 0;
-    });
+    // Split cards into visible and non-visible
+    const [visibleCards, hiddenCards] = cards.reduce((acc, card) => {
+        const isVisible = isNearViewport(card);
+        acc[isVisible ? 0 : 1].push(card);
+        return acc;
+    }, [[], []]);
 
-    if (sortableCards.length === 0) return;
+    // Sort visible cards first
+    const sortedVisible = visibleCards
+        .filter(card => {
+            const ratingElement = card.querySelector(CONFIG.SELECTORS.rating);
+            return ratingElement && getParsedRating(ratingElement) > 0;
+        })
+        .sort((a, b) => {
+            const ratingA = getParsedRating(a.querySelector(CONFIG.SELECTORS.rating));
+            const ratingB = getParsedRating(b.querySelector(CONFIG.SELECTORS.rating));
+            return ratingB - ratingA;
+        });
 
-    sortableCards.sort((a, b) => {
-        const ratingA = getParsedRating(a.querySelector(CONFIG.SELECTORS.rating));
-        const ratingB = getParsedRating(b.querySelector(CONFIG.SELECTORS.rating));
-        return ratingB - ratingA;
-    });
+    // Sort hidden cards only if needed
+    const sortedHidden = hiddenCards
+        .filter(card => {
+            const ratingElement = card.querySelector(CONFIG.SELECTORS.rating);
+            return ratingElement && getParsedRating(ratingElement) > 0;
+        })
+        .sort((a, b) => {
+            const ratingA = getParsedRating(a.querySelector(CONFIG.SELECTORS.rating));
+            const ratingB = getParsedRating(b.querySelector(CONFIG.SELECTORS.rating));
+            return ratingB - ratingA;
+        });
+
+    if (sortedVisible.length === 0 && sortedHidden.length === 0) return;
+
+    [...sortedVisible, ...sortedHidden].forEach(card => fragment.appendChild(card));
 
     if (isCarousel) {
         const scrollLeft = container.scrollLeft;
-        sortableCards.forEach(card => fragment.appendChild(card));
         container.appendChild(fragment);
         container.scrollLeft = scrollLeft;
     } else {
-        sortableCards.forEach(card => fragment.appendChild(card));
         container.appendChild(fragment);
     }
 }
