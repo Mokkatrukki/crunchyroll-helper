@@ -1,7 +1,20 @@
-// Configuration
+// Enums and Constants
+const PAGE_TYPES = {
+    ALPHABETICAL: 'alphabetical',
+    REGULAR: 'regular'
+};
+
+const DOM_STATES = {
+    COMPLETE: 'complete'
+};
+
 const CONFIG = {
-    SORT_COOLDOWN: 1000,
-    DEBOUNCE_WAIT: 1000,
+    TIMING: {
+        SORT_COOLDOWN: 1000,
+        DEBOUNCE_WAIT: 1000,
+        MAX_INIT_RETRIES: 3,
+        INIT_RETRY_DELAY: 500
+    },
     SELECTORS: {
         seriesCard: '[data-t="series-card"]',
         seriesCardWithPrefix: '[data-t^="series-card"], .browse-card [data-t^="series-card"]',
@@ -20,6 +33,10 @@ let lastSort = 0;
 let firstLoad = true;
 let isUserScrolling = false;
 let userInteractionTimeout;
+const ratingCache = new Map(); // Add rating cache
+
+// Add numeric rating cache
+const parsedRatingCache = new WeakMap();
 
 // Utility functions
 function debounce(func, wait) {
@@ -42,35 +59,75 @@ function findContainer(node) {
     return findContainer(node.parentElement);
 }
 
+// Add helper function for rating validation
+function isValidRating(rating) {
+    const numRating = parseFloat(rating);
+    return !isNaN(numRating) && numRating >= 0 && numRating <= 5;
+}
+
+// Add rating parser utility
+function getParsedRating(element) {
+    if (parsedRatingCache.has(element)) {
+        return parsedRatingCache.get(element);
+    }
+    const rating = parseFloat(element.textContent);
+    if (!isNaN(rating) && rating > 0) {
+        parsedRatingCache.set(element, rating);
+        return rating;
+    }
+    return 0;
+}
+
+// Helper function to determine page type
+function getPageType() {
+    return window.location.href.includes('/videos/alphabetical') 
+        ? PAGE_TYPES.ALPHABETICAL 
+        : PAGE_TYPES.REGULAR;
+}
+
 // Main functionality
 function addRatingsToTitles() {
-    const cards = window.location.href.includes('/videos/alphabetical')
-        ? document.querySelectorAll(CONFIG.SELECTORS.seriesCard)
-        : document.querySelectorAll(CONFIG.SELECTORS.seriesCardWithPrefix);
+    const pageType = getPageType();
+    const cards = document.querySelectorAll(
+        pageType === PAGE_TYPES.ALPHABETICAL
+            ? CONFIG.SELECTORS.seriesCard
+            : CONFIG.SELECTORS.seriesCardWithPrefix
+    );
 
     let hasChanges = false;
 
     cards.forEach(card => {
-        const titleElement = window.location.href.includes('/videos/alphabetical')
+        const titleElement = pageType === PAGE_TYPES.ALPHABETICAL
             ? card.querySelector(CONFIG.SELECTORS.titleLinkAlphabetical)
             : card.querySelector(CONFIG.SELECTORS.titleLink);
 
-        const ratingElement = card.querySelector(CONFIG.SELECTORS.rating);
-        const rating = ratingElement?.textContent?.trim();
+        if (!titleElement || titleElement.textContent.includes('(')) return;
+
+        const titleText = titleElement.textContent;
+        let rating = ratingCache.get(titleText);
+
+        if (!rating) {
+            const ratingElement = card.querySelector(CONFIG.SELECTORS.rating);
+            const rawRating = ratingElement?.textContent?.trim();
+            if (rawRating && isValidRating(rawRating)) {
+                rating = rawRating;
+                ratingCache.set(titleText, rating);
+            }
+        }
         
-        if (titleElement && rating && !titleElement.textContent.includes('(')) {
-            titleElement.textContent = `${titleElement.textContent} (${rating})`;
+        if (rating) {
+            titleElement.textContent = `${titleText} (${rating})`;
             hasChanges = true;
         }
     });
 
-    if (!window.location.href.includes('/videos/alphabetical') && hasChanges) {
+    if (pageType !== PAGE_TYPES.ALPHABETICAL && hasChanges) {
         sortSeriesCards();
     }
 }
 
 function sortSeriesCards() {
-    if (!firstLoad && (isSorting || (Date.now() - lastSort) < CONFIG.SORT_COOLDOWN)) return;
+    if (!firstLoad && (isSorting || (Date.now() - lastSort) < CONFIG.TIMING.SORT_COOLDOWN)) return;
 
     isSorting = true;
     lastSort = Date.now();
@@ -96,20 +153,19 @@ function sortContainer(container, cardsNodeList) {
 
     const cards = Array.from(cardsNodeList);
     const fragment = document.createDocumentFragment();
-    const ratingCache = new WeakMap();
     
     const sortableCards = cards.filter(card => {
         const ratingElement = card.querySelector(CONFIG.SELECTORS.rating);
-        if (ratingElement && parseFloat(ratingElement.textContent) > 0) {
-            ratingCache.set(card, parseFloat(ratingElement.textContent));
-            return true;
-        }
-        return false;
+        return ratingElement && getParsedRating(ratingElement) > 0;
     });
 
     if (sortableCards.length === 0) return;
 
-    sortableCards.sort((a, b) => ratingCache.get(b) - ratingCache.get(a));
+    sortableCards.sort((a, b) => {
+        const ratingA = getParsedRating(a.querySelector(CONFIG.SELECTORS.rating));
+        const ratingB = getParsedRating(b.querySelector(CONFIG.SELECTORS.rating));
+        return ratingB - ratingA;
+    });
 
     if (isCarousel) {
         const scrollLeft = container.scrollLeft;
@@ -134,7 +190,7 @@ function setupCarouselInteractionHandlers() {
         userInteractionTimeout = setTimeout(() => {
             isUserScrolling = false;
             addRatingsToTitles() && sortSeriesCards();
-        }, CONFIG.SORT_COOLDOWN);
+        }, CONFIG.TIMING.SORT_COOLDOWN);
     };
 
     ['mousedown', 'touchstart'].forEach(event => 
@@ -150,6 +206,7 @@ function setupNavigationHandlers() {
         const url = location.href;
         if (url !== lastUrl) {
             lastUrl = url;
+            ratingCache.clear(); // Clear cache on navigation
             initializePageContent();
         }
     }).observe(document, { subtree: true, childList: true });
@@ -158,7 +215,7 @@ function setupNavigationHandlers() {
 // Initialization
 const debouncedUpdate = debounce(() => {
     addRatingsToTitles();
-}, CONFIG.DEBOUNCE_WAIT);
+}, CONFIG.TIMING.DEBOUNCE_WAIT);
 
 const observer = new MutationObserver(() => {
     if (!isUserScrolling) {
@@ -166,7 +223,14 @@ const observer = new MutationObserver(() => {
     }
 });
 
-function initializePageContent() {
+function initializePageContent(retryCount = 0) {
+    if (document.readyState !== DOM_STATES.COMPLETE) {
+        if (retryCount < CONFIG.TIMING.MAX_INIT_RETRIES) {
+            setTimeout(() => initializePageContent(retryCount + 1), CONFIG.TIMING.INIT_RETRY_DELAY);
+            return;
+        }
+    }
+
     if (firstLoad) {
         addRatingsToTitles();
         sortSeriesCards();
