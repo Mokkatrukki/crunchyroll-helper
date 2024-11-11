@@ -1,4 +1,3 @@
-// content.js
 let isSorting = false;
 let lastSort = 0;
 const SORT_COOLDOWN = 1000;
@@ -6,21 +5,88 @@ let processedCards = new WeakSet();
 let isUserScrolling = false;
 let userInteractionTimeout;
 
-// Default settings
-let settings = {
-    showRatings: true,
-    enableSorting: true
-};
+function addRatingsToTitles() {
+    // Handle different page layouts
+    let cards;
+    if (window.location.href.includes('/videos/alphabetical')) {
+        cards = document.querySelectorAll('[data-t="series-card"]');
+    } else {
+        cards = document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]');
+    }
 
-function loadSettings() {
-    return new Promise((resolve) => {
-        try {
-            resolve(settings);
-        } catch (error) {
-            console.log('Using default settings');
-            resolve(settings);
+    let hasChanges = false;
+
+    cards.forEach(card => {
+        // Skip if we've already processed this exact DOM element
+        if (processedCards.has(card)) {
+            const titleElement = window.location.href.includes('/videos/alphabetical') ?
+                card.querySelector('.horizontal-card__title-link--s2h7N') :
+                card.querySelector('[data-t="title"] a');
+            
+            // If title doesn't have rating anymore (e.g., after dynamic update), remove from processed
+            if (titleElement && !titleElement.textContent.includes('(')) {
+                processedCards.delete(card);
+                hasChanges = true;
+            } else {
+                return;
+            }
+        }
+
+        const titleElement = window.location.href.includes('/videos/alphabetical') ?
+            card.querySelector('.horizontal-card__title-link--s2h7N') :
+            card.querySelector('[data-t="title"] a');
+
+        const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
+        const rating = ratingElement?.textContent?.trim();
+
+        if (titleElement && rating && !titleElement.textContent.includes('(')) {
+            titleElement.textContent = `${titleElement.textContent} (${rating})`;
+            processedCards.add(card); // Mark the DOM element as processed
+            hasChanges = true;
         }
     });
+
+    // Sort if not on alphabetical page
+    if (!window.location.href.includes('/videos/alphabetical') && hasChanges) {
+        sortSeriesCards();
+    }
+}
+
+function sortSeriesCards() {
+    const now = Date.now();
+    if (isSorting || (now - lastSort) < SORT_COOLDOWN) {
+        return;
+    }
+
+    isSorting = true;
+    lastSort = now;
+
+    try {
+        // Handle standard layout
+        const standardContainers = document.querySelectorAll('[data-t="cards"]');
+        if (standardContainers.length) {
+            standardContainers.forEach(container => {
+                sortContainer(container, container.children);
+            });
+        }
+
+        // Handle grid layout
+        const gridContainer = document.querySelector('.erc-browse-cards-collection');
+        if (gridContainer) {
+            const gridCards = gridContainer.querySelectorAll('.browse-card');
+            if (gridCards.length) {
+                sortContainer(gridContainer, gridCards);
+            }
+        }
+
+        // Handle carousels
+        const carousels = document.querySelectorAll('.carousel-scroller__track--43f0L');
+        carousels.forEach(carousel => {
+            sortContainer(carousel, carousel.children);
+        });
+    } finally {
+        isSorting = false;
+    }
 }
 
 function sortContainer(container, cardsNodeList) {
@@ -53,57 +119,6 @@ function sortContainer(container, cardsNodeList) {
         cardsWithRatings.forEach(({ card }) => fragment.appendChild(card));
         container.appendChild(fragment);
     }
-}
-
-function addRatingsToTitles() {
-    loadSettings().then(settings => {
-        if (!settings.showRatings) return;
-
-        // Handle different page layouts
-        let cards;
-        if (window.location.href.includes('/videos/alphabetical')) {
-            cards = document.querySelectorAll('[data-t="series-card"]');
-        } else {
-            cards = document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]');
-        }
-
-        let hasChanges = false;
-
-        cards.forEach(card => {
-            // Skip if we've already processed this exact DOM element
-            if (processedCards.has(card)) {
-                const titleElement = window.location.href.includes('/videos/alphabetical') ?
-                    card.querySelector('.horizontal-card__title-link--s2h7N') :
-                    card.querySelector('[data-t="title"] a');
-                
-                // If title doesn't have rating anymore (e.g., after dynamic update), remove from processed
-                if (titleElement && !titleElement.textContent.includes('(')) {
-                    processedCards.delete(card);
-                    hasChanges = true;
-                } else {
-                    return;
-                }
-            }
-
-            const titleElement = window.location.href.includes('/videos/alphabetical') ?
-                card.querySelector('.horizontal-card__title-link--s2h7N') :
-                card.querySelector('[data-t="title"] a');
-
-            const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
-            const rating = ratingElement?.textContent?.trim();
-
-            if (titleElement && rating && !titleElement.textContent.includes('(')) {
-                titleElement.textContent = `${titleElement.textContent} (${rating})`;
-                processedCards.add(card); // Mark the DOM element as processed
-                hasChanges = true;
-            }
-        });
-
-        // Only sort if enabled and not on alphabetical page
-        if (settings.enableSorting && !window.location.href.includes('/videos/alphabetical') && hasChanges) {
-            sortSeriesCards();
-        }
-    });
 }
 
 // Simplified observer
@@ -151,47 +166,6 @@ function setupCarouselInteractionHandlers() {
             isUserScrolling = false;
         }, 1000);
     }, true);
-}
-
-function sortSeriesCards() {
-    loadSettings().then(settings => {
-        if (!settings.enableSorting) return;
-
-        const now = Date.now();
-        if (isSorting || (now - lastSort) < SORT_COOLDOWN) {
-            return;
-        }
-
-        isSorting = true;
-        lastSort = now;
-
-        try {
-            // Handle standard layout
-            const standardContainers = document.querySelectorAll('[data-t="cards"]');
-            if (standardContainers.length) {
-                standardContainers.forEach(container => {
-                    sortContainer(container, container.children);
-                });
-            }
-
-            // Handle grid layout
-            const gridContainer = document.querySelector('.erc-browse-cards-collection');
-            if (gridContainer) {
-                const gridCards = gridContainer.querySelectorAll('.browse-card');
-                if (gridCards.length) {
-                    sortContainer(gridContainer, gridCards);
-                }
-            }
-
-            // Handle carousels
-            const carousels = document.querySelectorAll('.carousel-scroller__track--43f0L');
-            carousels.forEach(carousel => {
-                sortContainer(carousel, carousel.children);
-            });
-        } finally {
-            isSorting = false;
-        }
-    });
 }
 
 // Improved debounce with immediate option
@@ -249,12 +223,3 @@ observer.observe(document.body, {
 setupNavigationHandlers();
 initializePageContent();
 setupCarouselInteractionHandlers();
-
-// Settings listener
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === 'settingsUpdated') {
-        settings = request.settings;
-        processedCards = new WeakSet();
-        debouncedUpdate();
-    }
-});

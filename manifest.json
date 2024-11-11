@@ -4,13 +4,8 @@
   "version": "1.1",
   "description": "See ratings instantly and find top-rated shows easily on Crunchyroll.",
   "permissions": [
-      "activeTab",
-      "storage"
+      "activeTab"
   ],
-  "background": {
-      "service_worker": "background.js"
-  },
-  "options_page": "options.html",
   "content_scripts": [
       {
           "matches": ["*://*.crunchyroll.com/*"],
