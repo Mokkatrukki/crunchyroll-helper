@@ -61,6 +61,32 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 # Changelog
 
+## [1.4.0] - 2024-11-11
+### Added
+- WeakMap caching for ratings to avoid repeated DOM queries
+- DocumentFragment for batch DOM updates
+- Container state tracking to prevent unnecessary sorts
+- Comprehensive page navigation detection
+- Retry mechanism with exponential backoff for content loading
+- User scroll detection for mouse and touch events
+- IntersectionObserver for lazy-loaded carousel handling
+
+### Changed
+- Optimized sorting with caching and batch updates
+- Improved carousel sorting behavior and position management
+- Enhanced page navigation and content initialization
+- Replaced polling with MutationObserver for better performance
+- Optimized content script performance with processed cards tracking
+- Improved card processing reliability with WeakSet implementation
+
+### Fixed
+- Prevent carousel refresh during user interaction
+- Maintain carousel scroll position during sorting
+- Handle various navigation scenarios properly
+- Eliminate UI flashing during updates
+- Improve dynamic content handling
+- Fix inconsistent sorting during page navigation
+
 ## [1.3.0] - 2024-11-07
 ### Added
 - Support for alphabetical view page
