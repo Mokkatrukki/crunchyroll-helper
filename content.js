@@ -1,89 +1,51 @@
 let isSorting = false;
 let lastSort = 0;
 const SORT_COOLDOWN = 1000;
-let processedCards = new WeakSet();
 let isUserScrolling = false;
 let userInteractionTimeout;
 
 function addRatingsToTitles() {
-    // Handle different page layouts
-    let cards;
-    if (window.location.href.includes('/videos/alphabetical')) {
-        cards = document.querySelectorAll('[data-t="series-card"]');
-    } else {
-        cards = document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]');
-    }
+    const cards = window.location.href.includes('/videos/alphabetical')
+        ? document.querySelectorAll('[data-t="series-card"]')
+        : document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]');
 
     let hasChanges = false;
 
     cards.forEach(card => {
-        // Skip if we've already processed this exact DOM element
-        if (processedCards.has(card)) {
-            const titleElement = window.location.href.includes('/videos/alphabetical') ?
-                card.querySelector('.horizontal-card__title-link--s2h7N') :
-                card.querySelector('[data-t="title"] a');
-            
-            // If title doesn't have rating anymore (e.g., after dynamic update), remove from processed
-            if (titleElement && !titleElement.textContent.includes('(')) {
-                processedCards.delete(card);
-                hasChanges = true;
-            } else {
-                return;
-            }
-        }
-
-        const titleElement = window.location.href.includes('/videos/alphabetical') ?
-            card.querySelector('.horizontal-card__title-link--s2h7N') :
-            card.querySelector('[data-t="title"] a');
+        const titleElement = window.location.href.includes('/videos/alphabetical')
+            ? card.querySelector('.horizontal-card__title-link--s2h7N')
+            : card.querySelector('[data-t="title"] a');
 
         const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
         const rating = ratingElement?.textContent?.trim();
-
+        
         if (titleElement && rating && !titleElement.textContent.includes('(')) {
             titleElement.textContent = `${titleElement.textContent} (${rating})`;
-            processedCards.add(card); // Mark the DOM element as processed
             hasChanges = true;
         }
     });
 
-    // Sort if not on alphabetical page
+    // Sort if not on alphabetical page and changes were made
     if (!window.location.href.includes('/videos/alphabetical') && hasChanges) {
         sortSeriesCards();
     }
 }
 
 function sortSeriesCards() {
-    const now = Date.now();
-    if (isSorting || (now - lastSort) < SORT_COOLDOWN) {
-        return;
-    }
+    if (isSorting || (Date.now() - lastSort) < SORT_COOLDOWN) return;
 
     isSorting = true;
-    lastSort = now;
+    lastSort = Date.now();
 
     try {
-        // Handle standard layout
-        const standardContainers = document.querySelectorAll('[data-t="cards"]');
-        if (standardContainers.length) {
-            standardContainers.forEach(container => {
-                sortContainer(container, container.children);
-            });
-        }
+        // Handle all container types
+        const containers = [
+            ...document.querySelectorAll('[data-t="cards"]'),
+            document.querySelector('.erc-browse-cards-collection'),
+            ...document.querySelectorAll('.carousel-scroller__track--43f0L')
+        ].filter(Boolean);
 
-        // Handle grid layout
-        const gridContainer = document.querySelector('.erc-browse-cards-collection');
-        if (gridContainer) {
-            const gridCards = gridContainer.querySelectorAll('.browse-card');
-            if (gridCards.length) {
-                sortContainer(gridContainer, gridCards);
-            }
-        }
-
-        // Handle carousels
-        const carousels = document.querySelectorAll('.carousel-scroller__track--43f0L');
-        carousels.forEach(carousel => {
-            sortContainer(carousel, carousel.children);
-        });
+        containers.forEach(container => sortContainer(container, container.children));
     } finally {
         isSorting = false;
     }
@@ -122,50 +84,32 @@ function sortContainer(container, cardsNodeList) {
 }
 
 // Simplified observer
-const observer = new MutationObserver((mutations) => {
-    if (isUserScrolling) return;
-    
-    let shouldUpdate = false;
-    for (const mutation of mutations) {
-        if (mutation.target.classList?.contains('star-rating-short-static__rating--bdAfR')) {
-            continue;
-        }
-        
-        shouldUpdate = true;
-        break;
-    }
-
-    if (shouldUpdate) {
+const observer = new MutationObserver(() => {
+    if (!isUserScrolling) {
         debouncedUpdate();
     }
 });
 
-// Add event listeners for user interaction
+// Enhanced carousel interaction handlers
 function setupCarouselInteractionHandlers() {
-    document.addEventListener('mousedown', () => {
+    const handleInteractionStart = () => {
         isUserScrolling = true;
         clearTimeout(userInteractionTimeout);
-    }, true);
+    };
 
-    document.addEventListener('mouseup', () => {
+    const handleInteractionEnd = () => {
         clearTimeout(userInteractionTimeout);
         userInteractionTimeout = setTimeout(() => {
             isUserScrolling = false;
-        }, 1000);
-    }, true);
+            addRatingsToTitles() && sortSeriesCards();
+        }, SORT_COOLDOWN);
+    };
 
-    // Handle touch events for mobile
-    document.addEventListener('touchstart', () => {
-        isUserScrolling = true;
-        clearTimeout(userInteractionTimeout);
-    }, true);
-
-    document.addEventListener('touchend', () => {
-        clearTimeout(userInteractionTimeout);
-        userInteractionTimeout = setTimeout(() => {
-            isUserScrolling = false;
-        }, 1000);
-    }, true);
+    ['mousedown', 'touchstart'].forEach(event => 
+        document.addEventListener(event, handleInteractionStart, { passive: true }));
+    
+    ['mouseup', 'touchend'].forEach(event => 
+        document.addEventListener(event, handleInteractionEnd, { passive: true }));
 }
 
 // Improved debounce with immediate option
@@ -185,8 +129,6 @@ const debouncedUpdate = debounce(() => {
     addRatingsToTitles();
 }, 1000);
 
-// Remove the setTimeout and replace with immediate initialization
-
 // Add this function before the observer definition
 function findContainer(node) {
     if (!node || node === document.body) return null;
@@ -197,7 +139,6 @@ function findContainer(node) {
 }
 
 function initializePageContent() {
-    processedCards = new WeakSet(); // Reset processed cards
     addRatingsToTitles();
     sortSeriesCards();
 }
