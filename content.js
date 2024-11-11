@@ -3,6 +3,10 @@ let isSorting = false;
 let lastSort = 0;
 const SORT_COOLDOWN = 1000;
 let processedCards = new WeakSet(); // Use WeakSet instead of Set for DOM elements
+let lastCarouselState = null;
+let debounceTimeout = null;
+let isUserScrolling = false;
+let userInteractionTimeout;
 
 // Default settings
 let settings = {
@@ -24,6 +28,12 @@ function loadSettings() {
 function sortContainer(container, cardsNodeList) {
     // Check if this is a carousel track
     const isCarousel = container.classList.contains('carousel-scroller__track--43f0L');
+    
+    // Don't sort if user is interacting with carousel
+    if (isCarousel && isUserScrolling) {
+        return;
+    }
+
     const cards = Array.from(cardsNodeList);
     
     const cardsWithRatings = cards.map(card => {
@@ -41,22 +51,19 @@ function sortContainer(container, cardsNodeList) {
     const newOrder = cardsWithRatings.map(({ card }) => card.outerHTML).join('');
     
     if (currentOrder !== newOrder) {
-        // If it's a carousel, handle the special case
+        // If it's a carousel, preserve the scroll position
         if (isCarousel) {
-            // Clear transform and any scroll position
-            container.style.transform = '';
-            container.scrollLeft = 0;
+            const scrollLeft = container.scrollLeft;
+            const transform = container.style.transform;
             
-            // Force layout recalculation
-            void container.offsetHeight;
-
             // Reappend in sorted order
             cardsWithRatings.forEach(({ card }) => {
                 container.appendChild(card);
             });
 
-            // Set transform explicitly to show first items
-            container.style.transform = 'translate3d(0px, 0px, 0px)';
+            // Restore position
+            container.scrollLeft = scrollLeft;
+            container.style.transform = transform;
         } else {
             // Regular container sorting
             cardsWithRatings.forEach(({ card }) => {
@@ -78,6 +85,8 @@ function addRatingsToTitles() {
             cards = document.querySelectorAll('[data-t^="series-card"], .browse-card [data-t^="series-card"]');
         }
 
+        let hasChanges = false;
+
         cards.forEach(card => {
             // Skip if we've already processed this exact DOM element
             if (processedCards.has(card)) {
@@ -88,6 +97,7 @@ function addRatingsToTitles() {
                 // If title doesn't have rating anymore (e.g., after dynamic update), remove from processed
                 if (titleElement && !titleElement.textContent.includes('(')) {
                     processedCards.delete(card);
+                    hasChanges = true;
                 } else {
                     return;
                 }
@@ -103,48 +113,53 @@ function addRatingsToTitles() {
             if (titleElement && rating && !titleElement.textContent.includes('(')) {
                 titleElement.textContent = `${titleElement.textContent} (${rating})`;
                 processedCards.add(card); // Mark the DOM element as processed
+                hasChanges = true;
             }
         });
 
         // Only sort if enabled and not on alphabetical page
-        if (settings.enableSorting && !window.location.href.includes('/videos/alphabetical')) {
+        if (settings.enableSorting && !window.location.href.includes('/videos/alphabetical') && hasChanges) {
             sortSeriesCards();
         }
     });
 }
 
+// Replace sortAllCarousels with a simpler version
 function sortAllCarousels() {
-    // Find all carousel tracks
     const tracks = document.querySelectorAll('.carousel-scroller__track--43f0L');
-
     tracks.forEach((track) => {
-        // Get current cards and sort them
-        const cards = Array.from(track.children);
-
-        const cardsWithRatings = cards.map(card => {
-            const ratingElement = card.querySelector('.star-rating-short-static__rating--bdAfR');
-            const rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
-            return { card, rating };
-        }).filter(item => item.rating > 0);
-
-        // Sort by rating
-        cardsWithRatings.sort((a, b) => b.rating - a.rating);
-
-        // Clear transform and any scroll position
-        track.style.transform = '';
-        track.scrollLeft = 0;
-        
-        // Force layout recalculation
-        void track.offsetHeight;
-
-        // Reappend in sorted order
-        cardsWithRatings.forEach(({ card }) => {
-            track.appendChild(card);
-        });
-
-        // Set transform explicitly
-        track.style.transform = 'translate3d(0px, 0px, 0px)';
+        if (!isUserScrolling) {
+            sortContainer(track, track.children);
+        }
     });
+}
+
+// Add event listeners for user interaction
+function setupCarouselInteractionHandlers() {
+    document.addEventListener('mousedown', () => {
+        isUserScrolling = true;
+        clearTimeout(userInteractionTimeout);
+    }, true);
+
+    document.addEventListener('mouseup', () => {
+        clearTimeout(userInteractionTimeout);
+        userInteractionTimeout = setTimeout(() => {
+            isUserScrolling = false;
+        }, 1000);
+    }, true);
+
+    // Handle touch events for mobile
+    document.addEventListener('touchstart', () => {
+        isUserScrolling = true;
+        clearTimeout(userInteractionTimeout);
+    }, true);
+
+    document.addEventListener('touchend', () => {
+        clearTimeout(userInteractionTimeout);
+        userInteractionTimeout = setTimeout(() => {
+            isUserScrolling = false;
+        }, 1000);
+    }, true);
 }
 
 function sortSeriesCards() {
@@ -203,7 +218,7 @@ const debouncedUpdate = debounce(() => {
 }, 1000);
 
 // Remove the setTimeout and replace with immediate initialization
-addRatingsToTitles();
+
 
 // Add this function before the observer definition
 function findContainer(node) {
@@ -220,6 +235,9 @@ const observer = new MutationObserver((mutations) => {
     let shouldUpdate = false;
     
     for (const mutation of mutations) {
+        // Ignore mutations if user is interacting
+        if (isUserScrolling) continue;
+
         if (mutation.target.classList?.contains('star-rating-short-static__rating--bdAfR')) {
             continue;
         }
@@ -259,7 +277,7 @@ const observer = new MutationObserver((mutations) => {
     }
 
     // Handle updates
-    if (shouldUpdate) {
+    if (shouldUpdate && !isUserScrolling) {
         debouncedUpdate();
     }
 
@@ -299,6 +317,10 @@ observer.observe(document.body, {
 
 // Initial carousel observation
 observeCarousels();
+addRatingsToTitles();
+
+// Initialize user interaction handlers
+setupCarouselInteractionHandlers();
 
 // Listen for settings changes
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
