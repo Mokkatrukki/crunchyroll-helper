@@ -1,5 +1,5 @@
 {
-  "manifest_version": 3,
+  "manifest_version": 4,
   "name": "Better Browsing for Crunchyroll",
   "version": "1.2",
   "description": "See ratings instantly and find top-rated shows easily on Crunchyroll.",
@@ -8,9 +8,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": [
-      "activeTab"
-  ],
+  "permissions": [],
   "content_scripts": [
       {
           "matches": ["*://*.crunchyroll.com/*"],
